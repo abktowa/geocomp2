@@ -301,29 +301,7 @@ def sample_path_elevations(graph: Graph, steps: list[PathStep], si: float,
 # SCORER (EDIT THIS)
 # =========================
 
-def make_profile_scorer(graph: Graph, si: float,
-                        target_ds: list[float], target_zs: list[float],
-                        allow_vertical_offset: bool = True,
-                        short_path_penalty: float = 1e6):
-    """
-    Returns scorer(steps) -> float (lower is better).
-    - Samples candidate path at target_ds.
-    - Optionally fits a constant vertical offset (median) to compare shape.
-    - Uses mean absolute error (MAE).
-    """
-    def scorer(steps: list[PathStep]) -> float:
-        zhat = sample_path_elevations(graph, steps, si, target_ds)
-        if any(v is None for v in zhat):
-            return short_path_penalty
-
-        if allow_vertical_offset:
-            diffs = sorted(t - h for t, h in zip(target_zs, zhat))
-            m = len(diffs) // 2
-            offset = diffs[m] if len(diffs) % 2 else 0.5 * (diffs[m-1] + diffs[m])
-            zhat = [h + offset for h in zhat]
-
-        return sum(abs(t - h) for t, h in zip(target_zs, zhat)) / max(1, len(target_zs))
-    return scorer
+def make_profile_scorer():
 
 # =========================
 # SEARCH (LENGTH-CONSTRAINED BEAM)
