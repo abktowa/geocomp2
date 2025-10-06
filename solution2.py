@@ -98,6 +98,9 @@ class TargetProfile:
     @property
     def L(self) -> float:
         return self.ds[-1] if self.ds else 0.0
+    
+    def getSlope(self, index) -> float:
+        return self.ds[index]/self.zs[index]
 
 # =========================
 # GEOMETRY HELPERS
@@ -301,7 +304,56 @@ def sample_path_elevations(graph: Graph, steps: list[PathStep], si: float,
 # SCORER (EDIT THIS)
 # =========================
 
-def make_profile_scorer():
+def make_profile_scorer(graph: Graph, candidate: CandidatePath, ourProf: TargetProfile):
+    # For this scorer, it will be a percent accuracy, using the following aspects:
+    # 1.) Average of accuracy in elevation gain between each PathLength window.  This will be found using a percent accuracy equation, 100 - (|desired_climb - cand_climb|/desired_climb)
+    # 2.) Comparing the overall length of both paths, which shouldn't be too significant due to our preliminary checks, but definitely impacts it.
+    #     This will also use a percent accuracy equation, 100 - (|desired_length - cand_length|/ desired_length)
+    # The final score will be determined by multiplying both of these accuracies together.  I.E. a cumulative climb accuracy of 80% and a length accuracy of 95% = .8 * .95 = 76% match
+    lengthAccuracy = 1 - (abs(ourProf.L() - candidate.total_length) / ourProf.L())
+    lengthConstant = 0
+    error = 0
+    candIndex = 0
+    distances = []
+    candClimb = []
+    profClimb = []
+
+    if candidate.total_length <= ourProf.L():
+        lengthConstant = 1 * lengthAccuracy
+    else:
+        lengthConstant = 1 / lengthAccuracy
+
+    thisProf = ourProf
+
+    for i in range(len(thisProf.ds)):
+        while thisProf.ds[i] > 0:
+            thisEdge = graph.edges[candidate.steps[candIndex].edge_id]
+            distances.append(min(thisEdge.length * candidate.steps[candIndex].frac * lengthConstant, thisProf.ds[i]))
+            if candIndex >= len(candidate.steps):
+                candClimb.append(0)
+                distances.append(thisProf.ds[i])
+                profClimb.append(thisProf.zs[i])
+            elif thisProf.ds[i] > thisEdge.length * candidate.steps[candIndex].frac * lengthConstant:
+                candClimb.append(thisEdge.climb * candidate.steps[candIndex].frac)
+                if(candIndex != len(candidate.steps) - 1):
+                    thisProf.ds[i] -= thisEdge.length * candidate.steps[candIndex].frac * lengthConstant
+                    candIndex += 1
+                else:
+                    pass
+                    #MAKE CODE TO ADD UP THE REST OF THE PROFILE
+            
+            elif thisProf.ds[i] < thisEdge.length * candidate.steps[candIndex].frac * lengthConstant:
+                distances.append(thisProf.ds[i])
+                candidate.steps[candIndex].frac -= thisProf.ds[i]/(thisEdge.length * lengthConstant)
+                thisProf.ds[i] = 0
+            
+            else:
+                distances.append(thisProf.ds[i])
+                thisProf.ds[i] = 0
+                candIndex += 1
+
+    
+    
 
 # =========================
 # SEARCH (LENGTH-CONSTRAINED BEAM)
