@@ -306,11 +306,11 @@ def sample_path_elevations(graph: Graph, steps: list[PathStep], si: float,
 
 def make_profile_scorer(graph: Graph, candidate: CandidatePath, ourProf: TargetProfile):
     # For this scorer, it will be a percent accuracy, using the following aspects:
-    # 1.) Average of accuracy in elevation gain between each PathLength window.  This will be found using a percent accuracy equation, 100 - (|desired_climb - cand_climb|/desired_climb)
+    # 1.) Average of accuracy in elevation gain between each PathLength window.  This will be found using a percent accuracy equation, 1 - (|desired_climb - cand_climb|/|desired_climb|)
     # 2.) Comparing the overall length of both paths, which shouldn't be too significant due to our preliminary checks, but definitely impacts it.
-    #     This will also use a percent accuracy equation, 100 - (|desired_length - cand_length|/ desired_length)
+    #     This will also use a percent accuracy equation, 1 - (|desired_length - cand_length|/ desired_length)
     # The final score will be determined by multiplying both of these accuracies together.  I.E. a cumulative climb accuracy of 80% and a length accuracy of 95% = .8 * .95 = 76% match
-    lengthAccuracy = 1 - (abs(ourProf.L() - candidate.total_length) / ourProf.L())
+    lengthAccuracy = 1 + (abs(ourProf.L() - candidate.total_length) / ourProf.L())
     lengthConstant = 0
     error = 0
     candIndex = 0
@@ -331,26 +331,35 @@ def make_profile_scorer(graph: Graph, candidate: CandidatePath, ourProf: TargetP
             distances.append(min(thisEdge.length * candidate.steps[candIndex].frac * lengthConstant, thisProf.ds[i]))
             if candIndex >= len(candidate.steps):
                 candClimb.append(0)
-                distances.append(thisProf.ds[i])
+                #distances.append(thisProf.ds[i])
                 profClimb.append(thisProf.zs[i])
             elif thisProf.ds[i] > thisEdge.length * candidate.steps[candIndex].frac * lengthConstant:
                 candClimb.append(thisEdge.climb * candidate.steps[candIndex].frac)
-                if(candIndex != len(candidate.steps) - 1):
-                    thisProf.ds[i] -= thisEdge.length * candidate.steps[candIndex].frac * lengthConstant
-                    candIndex += 1
-                else:
-                    pass
-                    #MAKE CODE TO ADD UP THE REST OF THE PROFILE
-            
+                profClimb.append(thisProf.zs[i] * (thisEdge.length * candidate.steps[candIndex].frac * lengthConstant)/thisProf.ds[i])
+                thisProf.ds[i] -= thisEdge.length * candidate.steps[candIndex].frac * lengthConstant
+                candIndex += 1 #Go onto next step in path
+                
             elif thisProf.ds[i] < thisEdge.length * candidate.steps[candIndex].frac * lengthConstant:
-                distances.append(thisProf.ds[i])
+                #distances.append(thisProf.ds[i])
+                profClimb.append(thisProf.zs[i])
+                candClimb.append(thisEdge.climb * (thisProf.ds[i]/(thisEdge.length * lengthConstant)))
                 candidate.steps[candIndex].frac -= thisProf.ds[i]/(thisEdge.length * lengthConstant)
-                thisProf.ds[i] = 0
+                thisProf.ds[i] = 0 #Goes onto next step in profile
             
             else:
-                distances.append(thisProf.ds[i])
+                #distances.append(thisProf.ds[i])
+                profClimb.append(thisProf.zs[i])
+                candClimb.append(thisEdge.climb * candidate.steps[candIndex].frac)
                 thisProf.ds[i] = 0
                 candIndex += 1
+
+    totalDistance = sum(distances)
+
+    for j in range(len(distances)):
+        error += (abs(profClimb[j] - candClimb[j])) * (distances[j] / totalDistance)
+
+    return error * lengthAccuracy
+
 
     
     
