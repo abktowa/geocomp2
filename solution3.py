@@ -232,14 +232,20 @@ def sample_path_elevations(graph: Graph, steps: List[PathStep], si: float,
 def make_profile_scorer(graph: Graph, si_first_edge: float, *,
                         target_ds: List[float], target_zs: List[float],
                         allow_vertical_offset: bool = True):
+    
+    #Gather distance and elevation change of our target
     td = list(target_ds)
     tz = list(target_zs)
+
+    #Ensure that profile has more than two points, and is increasing in distance throughout 
     assert len(td) == len(tz) and len(td) >= 2, "profile needs ≥ 2 points"
     for i in range(1, len(td)):
         if not (td[i] > td[i-1]):
             raise ValueError("target distances must be strictly increasing")
-    L_target = td[-1]
+    L_target = td[-1]  #Record final length of path
 
+
+    #Calculate total path of the candidate
     def candidate_length(steps: List[PathStep]) -> float:
         s = 0.0
         first = True
@@ -253,6 +259,7 @@ def make_profile_scorer(graph: Graph, si_first_edge: float, *,
             si = 0.0
         return s
 
+    #Calculate the score based on differences in length and in elevation changes
     def score(steps: List[PathStep]) -> float:
         zs = sample_path_elevations(graph, steps, si_first_edge, td)
         if zs[-1] is None:
@@ -261,29 +268,36 @@ def make_profile_scorer(graph: Graph, si_first_edge: float, *,
         z0 = zs[0]
         rel = [z - z0 for z in zs]
 
+        #Shift up or down the whole candidate path to best align with the profile
         if allow_vertical_offset:
             z_off = sum((rel[i] - tz[i]) for i in range(len(tz))) / len(tz)
         else:
             z_off = 0.0
 
-        eps = 1e-6
+        eps = 1e-6 #Target epsilon
         total_w = 0.0
         acc_sum = 0.0
+
+        #Calculate the differences in climb for the section
         for i in range(1, len(td)):
             w = td[i] - td[i-1]
-            tgt = (tz[i] - tz[i-1])
-            act = ((rel[i] - z_off) - (rel[i-1] - z_off))
+            tgt = (tz[i] - tz[i-1]) #Target segment climb
+            act = ((rel[i] - z_off) - (rel[i-1] - z_off)) #Candidate segment climb
             denom = max(eps, abs(tgt))
+            #Calculate the accuracy based on segment climbs
             seg_acc = 1.0 - abs(act - tgt) / denom
             seg_acc = min(1.0, max(0.0, seg_acc))
             acc_sum += seg_acc * w
             total_w += w
+        #Get the final accuracy for that climb
         climb_acc = acc_sum / max(eps, total_w)
 
+        #Calculate length difference between the target and candidate
         L_cand = candidate_length(steps)
         len_err = abs(L_cand - L_target) / max(1.0, L_target)
         len_acc = max(0.0, 1.0 - len_err)
 
+        #Final accuracy = climb accuracy * length accuracy
         total_acc = climb_acc * len_acc
         loss = 1.0 - total_acc
         return loss
