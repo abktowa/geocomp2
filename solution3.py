@@ -452,7 +452,9 @@ def search_best_path(
     EDGE_REPEAT_CAP = 3
     MAX_EXPANSIONS = 2_000_000
     BEAM_CAP = 4096
-    BIN = 25.0 
+    BIN = 25.0
+
+    in_window_seen = 0
 
     leash_r2 = None
     if center_xy is not None and radius_D is not None:
@@ -460,11 +462,13 @@ def search_best_path(
         leash_r2 = leash_r * leash_r
 
     def within_bounds(nid: int) -> bool:
-        if leash_r2 is None: return True
+        if leash_r2 is None:
+            return True
         n = graph.nodes[nid]
         return _dist2(n.x, n.y, center_xy[0], center_xy[1]) <= leash_r2 + 1e-6
 
     best_gap: Dict[Tuple[int, Optional[int], int], float] = {}
+
     def consider_state(dist: float, node: int, last_eid: Optional[int]) -> bool:
         b = int(dist // BIN)
         key = (node, last_eid, b)
@@ -493,7 +497,7 @@ def search_best_path(
             _push(openh, priority=abs(L - dist_fwd), dist=dist_fwd, node=e0.v,
                   steps=steps_fwd, last_eid=e0.id, used_counts={e0.id: 1}, scorer=scorer_fwd,
                   ploss=0.5, bin50=int(dist_fwd // 50.0))
-
+            
         rev_eid = reverse_of.get(e0.id)
         if rev_eid is not None:
             rev_v = graph.edges[rev_eid].v
@@ -517,12 +521,17 @@ def search_best_path(
         expansions += 1
 
         if (L - eps) <= st.dist <= (L + eps):
+            in_window_seen += 1
+            if (in_window_seen % 20) != 0:
+                continue
+
             score_fn = st.scorer or scorer_fwd
             loss = float(score_fn(st.steps)) if score_fn else abs(st.dist - L)
             if loss < best_loss:
                 best_loss = loss
                 best = CandidatePath(steps=list(st.steps), total_length=st.dist,
                                      si=si_used, ti=(st.steps[-1].frac if st.steps else 0.0))
+
         if st.dist > L + eps:
             continue
 
@@ -570,7 +579,7 @@ def search_best_path(
             else:
                 new_ploss = st.ploss
 
-            gap = abs(L - ndist)          # meters
+            gap = abs(L - ndist)
             pr = 0.6 * gap + 0.4 * (new_ploss * L)
 
             _push(openh, priority=pr, dist=ndist, node=v,
