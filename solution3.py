@@ -96,10 +96,10 @@ class TargetProfile:
         return self.ds[-1] if self.ds else 0.0
 
 # ========================= #
-# GEOMETRY / MATH           #
+# MATH HELPERS              #
 # ========================= #
 
-# Returns the (x, y, z) coordinates of the two endpoint nodes for a given edge.
+# Grabs the (x, y, z) coordinates of the two endpoint nodes for a given edge.
 def _edge_endpoints(graph: Graph, e: Edge):
     nu = graph.nodes[e.u]
     nv = graph.nodes[e.v]
@@ -394,7 +394,7 @@ def partial_path_check(graph: Graph, steps: List[PathStep], si_first_edge: float
 
 # This is for one item in the priority queue of the beam search. Carries the partial path plus metadata used for pruning and guidance. Ordered by `priority`, then a stable `tie` counter.
 @dataclass(order=True)
-class OpenState:
+class OpenNode:
     priority: float
     tie: int = field(compare=True)
     dist: float = field(compare=False)
@@ -406,11 +406,11 @@ class OpenState:
     ploss: float = field(compare=False, default=0.5)
     bin50: int = field(compare=False, default=0)
 
-# Pushes a new OpenState into the beam/heap with all required fields.
-def _push(heap: List['OpenState'], priority: float, dist: float, node: int,
+# Pushes a new OpenNode into the beam/heap with all required fields.
+def _push(heap: List['OpenNode'], priority: float, dist: float, node: int,
           steps: List[PathStep], last_eid: Optional[int],
           used_counts: Dict[int,int], scorer, ploss: float, bin50: int) -> None:
-    heapq.heappush(heap, OpenState(priority=priority, tie=next(_TIE),
+    heapq.heappush(heap, OpenNode(priority=priority, tie=next(_TIE),
                                    dist=dist, node=node, steps=steps,
                                    last_eid=last_eid, used_counts=used_counts,
                                    scorer=scorer, ploss=ploss, bin50=bin50))
@@ -461,7 +461,7 @@ def search_best_path(
         best_gap[key] = gap
         return True
 
-    openh: List[OpenState] = []
+    openh: List[OpenNode] = []
     si_used = 0.0
 
     if start.at_node is not None:
